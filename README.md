@@ -9,47 +9,49 @@
 ## level 0: independent PRs
   - ideal case. each PR inddependent of each others. example is a backend & frontend. BE focus on API implementation, FE focus on providing UI based on agreed upon specification
 
-```bash
-# branch 1
-echo "print('one')" > english.py
-echo "print('two')" >> english.py
-echo "print('three')" >> english.py
-git commit -i . -m 'first commit'
-
-# branch 2
-echo "print('unos')" > spanish.py
-echo "print('dos')" >> spanish.py
-echo "print('tres')" >> spanish.py
-git commit -i . -m 'second commit'
-
-# branch 3
-echo "print('one')" > france.py
-echo "print('two')" >> france.py
-echo "print('three')" >> france.py
-git commit -i . -m 'third commit'
-```
+  ```bash
+  # branch 1
+  echo "print('one')" > english.py
+  echo "print('two')" >> english.py
+  echo "print('three')" >> english.py
+  git commit -i . -m 'first commit'
+  
+  # branch 2
+  echo "print('unos')" > spanish.py
+  echo "print('dos')" >> spanish.py
+  echo "print('tres')" >> spanish.py
+  git commit -i . -m 'second commit'
+  
+  # branch 3
+  echo "print('one')" > france.py
+  echo "print('two')" >> france.py
+  echo "print('three')" >> france.py
+  git commit -i . -m 'third commit'
+  ```
   - however this is not always the situations. example: task #1 focus on bugfix, which required by task #2 which is a refactor, and then task #3 which is the actual feature implementation
+  
 ## level 1: several dependant PRs
-```bash
-# branch 1
-echo "print('1')" > integers.py
-echo "print('2')" >> integers.py
-echo "print('3')" >> integers.py
-git commit -i . -m 'first commit'
-
-# branch 2
-echo "import numbers" > rationals.py
-echo "print('0.5')" >> rationals.py
-echo "print('-100')" >> rationals.py
-git commit -i . -m 'second commit'
-
-# branch 3
-echo "import rationals" > reals.py
-echo "print('pi')" >> reals.py
-git commit -i . -m 'third commit'
-```
+  ```bash
+  # branch 1
+  echo "print('1')" > integers.py
+  echo "print('2')" >> integers.py
+  echo "print('3')" >> integers.py
+  git commit -i . -m 'first commit'
+  
+  # branch 2
+  echo "import numbers" > rationals.py
+  echo "print('0.5')" >> rationals.py
+  echo "print('-100')" >> rationals.py
+  git commit -i . -m 'second commit'
+  
+  # branch 3
+  echo "import rationals" > reals.py
+  echo "print('pi')" >> reals.py
+  git commit -i . -m 'third commit'
+  ```
   - ideally also cleanly separated, and focus on only 1 domain
   - to merge, just merge normally from the bottom most of the stack
+  
 ## level 2: using merge squash
   - in this age of AI-assisted coding, its very likely that we will have many commits on a single PR. in 1 case, I have >40 commits in a single PR. obviously we dont want all of them to be merge into our main branch. we only care about the last result, but we could still mantain the history inside the PR.
   - some reason is for calculating cycle time, which may need detailed commit history
