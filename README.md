@@ -59,6 +59,7 @@
   - to do that, from the topmost branch in the stack we could do `git rebase --onto <old_base_branch> main`. if you check it, the commit history have been changed to use the latest squashed commit
   - however if you notice, all the commit hash has also been modified. the implication is that all branch references have now lost
   - to fix it, we should use the `--update-refs` option. so the command is now `git rebase --update-refs --onto <old_base_branch> main`. now all the branches have been changed to point the new hashes
+  
   ```bash
   git checkout main
   git merge --squash branch-1
@@ -67,6 +68,7 @@
   git rebase --update-refs --onto branch-1 main 
   ```
   - to update all the remote branches, you could use `git push --force-with-lease --all`. however you should be aware as this would push all branches in your local device. the alternatives is to manually specify all the branches you wish to push:
+  
   ```bash
   git push --force-with-lease origin branch1 branch2 branch3
   ```
@@ -99,6 +101,7 @@
   echo "$STACKED_BRANCHES"
   ```
   put it in any of your `$PATH` folders. for example you could put it in `/usr/local/bin`. dont forget to run `chmod +x git-stack-list.sh. after that you could push the branches using this command:
+  
   ```bash
   git push --force-with-lease origin $(git stack-list)
   ```
