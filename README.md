@@ -192,47 +192,7 @@ This replays all commits from `branch-2` and `branch-3` on top of the updated `b
 
 You can automate stack updates using GitHub Actions. When a PR at the bottom of a stack is merged, automatically rebase and update all dependent PRs.
 
-Here's a basic workflow:
-
-```yaml
-name: Update Stacked PRs
-
-on:
-  pull_request:
-    types: [closed]
-
-jobs:
-  update-stack:
-    if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Find dependent PRs
-        id: find-deps
-        run: |
-          # Find all open PRs that have this PR's branch as base
-          BASE_BRANCH="${{ github.event.pull_request.head.ref }}"
-          gh pr list --base "$BASE_BRANCH" --json number,headRefName --jq '.[] | .headRefName' > dependent_branches.txt
-
-      - name: Rebase dependent PRs
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          while read branch; do
-            git checkout "$branch"
-            git rebase "${{ github.event.pull_request.base.ref }}"
-            git push --force-with-lease origin "$branch"
-          done < dependent_branches.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-This is a simplified version. In production, you'd want error handling, conflict detection, and notifications when automatic rebasing fails.
+> TBD
 
 ## Tools That Can Help
 
