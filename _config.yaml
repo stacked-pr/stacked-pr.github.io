@@ -1,0 +1,25 @@
+# Site settings
+title: Stacked Pull Requests
+description: Learn how to unleash you team productivity
+baseurl: "/" # The subpath of your site, e.g. /blog
+url: "https://stacked-pr.github.io" # The base hostname & protocol for your site
+
+# Theme settings (if using a Jekyll theme)
+remote_theme: pages-themes/hacker@v0.2.0
+plugins:
+- jekyll-remote-theme #
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+permalink: /:title/
+
+# Exclude files from the build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+
+# Other settings
+show_downloads: true # Example of a theme-specific setting
