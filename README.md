@@ -69,6 +69,7 @@ git commit -i . -m 'third commit'
   git push --force-with-lease origin branch1 branch2 branch3
   ```
   - to avoid needing to entering all those branches manually, you could create a small helper script:
+  
   ```bash
   #!/bin/bash
   # git-stack-list.sh
