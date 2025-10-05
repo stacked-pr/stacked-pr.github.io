@@ -1,237 +1,122 @@
-## The Problem
-
-Code review has always been a bottleneck in software development. In the age of LLM-assisted coding, it's increasingly common for developers to create multiple PRs in a single day. The problem? Waiting for PR approval is counter-productive, especially when your next task depends on code that's still sitting in review.
-
-You could just wait for approval before starting the next task, but that's inefficient. You could create a PR based on another unmerged PR, but then what happens when changes are requested? Enter stacked PRs: a workflow that lets you keep moving forward while maintaining clean, reviewable code.
-
-## Level 0: Independent PRs (The Easy Mode)
-
-The ideal scenario is when PRs are completely independent of each other. Think backend and frontend working in parallel: the backend team focuses on API implementation while the frontend team builds the UI based on an agreed-upon specification.
-
-```bash
-# Branch 1: English numbers
-git checkout -b english-numbers
-echo "print('one')" > english.py
-echo "print('two')" >> english.py
-echo "print('three')" >> english.py
-git add .
-git commit -m 'Add English number printer'
-
-# Branch 2: Spanish numbers (independent)
-git checkout main
-git checkout -b spanish-numbers
-echo "print('unos')" > spanish.py
-echo "print('dos')" >> spanish.py
-echo "print('tres')" >> spanish.py
-git add .
-git commit -m 'Add Spanish number printer'
-
-# Branch 3: French numbers (independent)
-git checkout main
-git checkout -b french-numbers
-echo "print('un')" > french.py
-echo "print('deux')" >> french.py
-echo "print('trois')" >> french.py
-git add .
-git commit -m 'Add French number printer'
-```
-
-Each branch stems from `main`, and they can be merged in any order without conflicts. Simple, clean, beautiful.
-
-But reality is rarely this neat. More often, you'll have a sequence like: Task #1 fixes a bug, Task #2 refactors the buggy code, and Task #3 implements a new feature using that refactored code. Each depends on the previous one.
-
-## Level 1: Dependent PRs (The Stack Begins)
-
-When PRs naturally depend on each other, you create a stack. Each branch builds on top of the previous one:
-
-```bash
-# Branch 1: Base functionality
-git checkout -b integers
-echo "print('1')" > integers.py
-echo "print('2')" >> integers.py
-echo "print('3')" >> integers.py
-git add .
-git commit -m 'Add integer printer'
-
-# Branch 2: Builds on branch 1
-git checkout -b rationals
-echo "import integers" > rationals.py
-echo "print('0.5')" >> rationals.py
-echo "print('-100')" >> rationals.py
-git add .
-git commit -m 'Add rational number printer'
-
-# Branch 3: Builds on branch 2
-git checkout -b reals
-echo "import rationals" > reals.py
-echo "print('pi')" >> reals.py
-git add .
-git commit -m 'Add real number printer'
-```
-
-Your commit history now looks like this:
-
-```
-main -> integers -> rationals -> reals
-```
-
-Each PR should still focus on a single domain or concern. The `integers` PR might be reviewed and merged first, then `rationals`, then `reals`. When merging, you simply merge from the bottom of the stack upward.
-
-The key principle: keep each PR focused and reviewable on its own, even though it depends on the previous one.
-
-## Level 2: Squash Merges (Where Things Get Interesting)
-
-Here's where most developers run into trouble. With AI-assisted coding, it's normal to accumulate many commits in a single PR. I've had PRs with over 40 commits (don't judge). You want a clean main branch history, so you use squash merges, but this creates a problem for stacked PRs.
-
-When you do `git merge branch-1 --squash`, git creates a new commit with a new hash. Your carefully constructed stack is now broken because `branch-2` and `branch-3` still reference the old commits from `branch-1`.
-
-Here's how to fix it:
-
-```bash
-# Merge the bottom PR with squash
-git checkout main
-git merge --squash branch-1
-git commit -m 'Add integer printer'
-
-# Rebase the rest of the stack onto the new main
-git checkout branch-3  # Start from the top of the stack
-git rebase --update-refs --onto branch-1 main
-```
-
-Let's break down that rebase command:
-
-- `--onto branch-1`: The new base for your commits
-- `main`: The old base (what you're moving away from)
-- `--update-refs`: This is the magic flag that updates all branch references in your stack
-
-Without `--update-refs`, git would rebase your commits but leave your branch pointers at the old commits. With it, all branches in your stack automatically point to the newly rebased commits.
-
-### Pushing Your Updated Stack
-
-Now you need to update your remote branches. You could use:
-
-```bash
-git push --force-with-lease --all
-```
-
-But be careful: this pushes *all* local branches. If you have other work in progress, you might not want that.
-
-The safer option is to specify branches:
-
-```bash
-git push --force-with-lease origin branch-1 branch-2 branch-3
-```
-
-But typing all those branch names is tedious. Here's a helper script to automate it:
-
-```bash
-#!/bin/bash
-# Save as: git-stack-list (in your PATH, e.g., /usr/local/bin)
-
-# Lists all branches in the current stack
-# Usage: git stack-list [base_branch]
-
-set -e
-
-BASE_BRANCH="${1:-main}"
-
-STACKED_BRANCHES=$(git for-each-ref --format='%(refname:short)' refs/heads/ \
-    | grep -v "^$BASE_BRANCH\$" \
-    | while read branch; do
-        if git merge-base --is-ancestor "$branch" HEAD 2>/dev/null && \
-           git merge-base --is-ancestor "$BASE_BRANCH" "$branch" 2>/dev/null; then
-            commit_count=$(git rev-list --count "$BASE_BRANCH..$branch")
-            echo "$commit_count $branch"
-        fi
-    done \
-    | sort -n \
-    | cut -d' ' -f2)
-
-echo "$STACKED_BRANCHES"
-```
-
-Make it executable:
-
-```bash
-chmod +x /usr/local/bin/git-stack-list
-```
-
-Now you can push your entire stack with:
-
-```bash
-git push --force-with-lease origin $(git stack-list)
-```
-
-Much better. This script finds all branches that are ancestors of your current branch and descendants of main, sorts them by commit count (bottom to top), and outputs them as a space-separated list.
-
-## Level 3: Handling Changes in the Middle of the Stack
-
-Code review feedback is inevitable. What happens when a reviewer requests changes to a PR in the middle of your stack?
-
-**Best case scenario:** Your PRs modify different files. This is why keeping PRs focused matters. If `branch-1` touches `auth.py` and `branch-2` touches `api.py`, you can make changes without conflicts.
-
-The workflow:
-
-```bash
-# Make changes to the middle branch
-git checkout branch-1
-# ... make your changes ...
-git add .
-git commit -m 'Address review feedback'
-
-# Rebase everything above it
-git checkout branch-3  # Top of the stack
-git rebase --update-refs branch-1
-```
-
-This replays all commits from `branch-2` and `branch-3` on top of the updated `branch-1`.
-
-**Worst case scenario:** Changes cause conflicts. You'll need to resolve them during the rebase. This is why file separation is so important in stacked PRs.
-
-## Bonus: Automating with GitHub Actions
-
-You can automate stack updates using GitHub Actions. When a PR at the bottom of a stack is merged, automatically rebase and update all dependent PRs.
-
-> TBD
-
-## Tools That Can Help
-
-While this guide focuses on understanding the mechanics, several tools can streamline stacked PR workflows:
-
-- **[Graphite](https://graphite.dev)**: Provides CLI tools and a dashboard for managing stacks
-- **[Jujutsu (jj)](https://github.com/martinvonz/jj)**: A Git-compatible VCS with first-class support for stacked changes
-- **[git-branchstack](https://github.com/krobelus/git-branchstack)**: Lightweight tooling specifically for branch stacks
-
-These tools automate much of what we've covered, but understanding the underlying mechanics helps when things go wrong (and they will go wrong, because git).
-
-## Best Practices for Stacked PRs
-
-1. **Keep PRs small and focused**: Each PR should be reviewable in 10-15 minutes. If it's larger, it should probably be a stack.
-
-2. **Maintain clear boundaries**: Each PR should modify distinct files when possible. If PRs must touch the same files, keep changes to different functions or sections.
-
-3. **Write good PR descriptions**: Explain the stack structure. "This PR depends on #123" saves reviewers from confusion.
-
-4. **Use draft PRs strategically**: Mark dependent PRs as drafts until their base is merged. This signals they're not ready for full review.
-
-5. **Communicate with your team**: Stacked PRs require more coordination. Make sure reviewers understand the stack structure.
-
-6. **Don't stack too deep**: More than 4-5 PRs in a stack becomes unwieldy. If you're going deeper, consider whether you're breaking changes down appropriately.
-
-## Conclusion
-
-Stacked PRs aren't a silver bullet, but they're a powerful technique for maintaining velocity without sacrificing code quality. The key is understanding the underlying git mechanics so you can handle the inevitable complications.
-
-The workflow becomes second nature after a few stacks. You'll find yourself naturally thinking in terms of dependencies and breaking work into reviewable chunks. And when someone asks "Why don't you just wait for the first PR to merge?", you can smile knowingly and keep shipping.
-
-Just remember: with great stacking power comes great rebase responsibility. Use `--force-with-lease`, never `--force`, and may your merge conflicts be few and far between.
-
-## References & Acknowledgements
-
-- [Stacked Diffs Versus Pull Requests](https://jg.gg/2018/09/29/stacked-diffs-versus-pull-requests/) by Jackson Gabbard
-- [Stacked PRs](https://stacked.dev) by Graphite - the original inspiration for this guide
-- The countless developers who've struggled through git rebase conflicts so we don't have to
-
----
-
-*Found this helpful? Bookmark it for the next time you're explaining stacked PRs to a teammate. Found an issue? The author probably needs to rebase something.*
+# Stacked PR
+
+## outline
+- overview
+  - code review have always been a bottle neck
+  - in these age of LLM, its normal for devs to create lots of PRs everyday
+  - waiting for PRs to be accepted is counter-productive. however if oftentimes, our next task is dependant on out previously unapproved PR. how to solve it?
+
+## level 0: independent PRs
+  - ideal case. each PR inddependent of each others. example is a backend & frontend. BE focus on API implementation, FE focus on providing UI based on agreed upon specification
+
+  ```bash
+  # branch 1
+  echo "print('one')" > english.py
+  echo "print('two')" >> english.py
+  echo "print('three')" >> english.py
+  git commit -i . -m 'first commit'
+  
+  # branch 2
+  echo "print('unos')" > spanish.py
+  echo "print('dos')" >> spanish.py
+  echo "print('tres')" >> spanish.py
+  git commit -i . -m 'second commit'
+  
+  # branch 3
+  echo "print('one')" > france.py
+  echo "print('two')" >> france.py
+  echo "print('three')" >> france.py
+  git commit -i . -m 'third commit'
+  ```
+  - however this is not always the situations. example: task #1 focus on bugfix, which required by task #2 which is a refactor, and then task #3 which is the actual feature implementation
+  
+## level 1: several dependant PRs
+  ```bash
+  # branch 1
+  echo "print('1')" > integers.py
+  echo "print('2')" >> integers.py
+  echo "print('3')" >> integers.py
+  git commit -i . -m 'first commit'
+  
+  # branch 2
+  echo "import numbers" > rationals.py
+  echo "print('0.5')" >> rationals.py
+  echo "print('-100')" >> rationals.py
+  git commit -i . -m 'second commit'
+  
+  # branch 3
+  echo "import rationals" > reals.py
+  echo "print('pi')" >> reals.py
+  git commit -i . -m 'third commit'
+  ```
+  - ideally also cleanly separated, and focus on only 1 domain
+  - to merge, just merge normally from the bottom most of the stack
+  
+## level 2: using merge squash
+  - in this age of AI-assisted coding, its very likely that we will have many commits on a single PR. in 1 case, I have >40 commits in a single PR. obviously we dont want all of them to be merge into our main branch. we only care about the last result, but we could still mantain the history inside the PR.
+  - some reason is for calculating cycle time, which may need detailed commit history
+  - however this introduce complication. when we do `git merge <branch_name> -- squash`, it would actually create new commit. so we will need to adjust our history chain with this new commit
+  - to do that, from the topmost branch in the stack we could do `git rebase --onto <old_base_branch> main`. if you check it, the commit history have been changed to use the latest squashed commit
+  - however if you notice, all the commit hash has also been modified. the implication is that all branch references have now lost
+  - to fix it, we should use the `--update-refs` option. so the command is now `git rebase --update-refs --onto <old_base_branch> main`. now all the branches have been changed to point the new hashes
+  
+  ```bash
+  git checkout main
+  git merge --squash branch-1
+
+  git checkout branch-3
+  git rebase --update-refs --onto branch-1 main 
+  ```
+  - to update all the remote branches, you could use `git push --force-with-lease --all`. however you should be aware as this would push all branches in your local device. the alternatives is to manually specify all the branches you wish to push:
+  
+  ```bash
+  git push --force-with-lease origin branch1 branch2 branch3
+  ```
+  - to avoid needing to entering all those branches manually, you could create a small helper script:
+  
+  ```bash
+  #!/bin/bash
+  # git-stack-list.sh
+    
+  # Git custom command to retrieve all branches in a stack
+  # Usage: git stack-list [base_branch]
+  
+  set -e
+  
+  # Get base branch from argument or default to main
+  BASE_BRANCH="${1:-main}"
+
+  STACKED_BRANCHES=$(git for-each-ref --format='%(refname:short)' refs/heads/ \
+      | grep -v "^$BASE_BRANCH\$" \
+      | while read branch; do
+          if git merge-base --is-ancestor "$branch" HEAD 2>/dev/null && \
+             git merge-base --is-ancestor "$BASE_BRANCH" "$branch" 2>/dev/null; then
+              commit_count=$(git rev-list --count "$BASE_BRANCH..$branch")
+              echo "$commit_count $branch"
+          fi
+      done \
+      | sort -n \
+      | cut -d' ' -f2)
+  
+  echo "$STACKED_BRANCHES"
+  ```
+  put it in any of your `$PATH` folders. for example you could put it in `/usr/local/bin`. dont forget to run `chmod +x git-stack-list.sh. after that you could push the branches using this command:
+  
+  ```bash
+  git push --force-with-lease origin $(git stack-list)
+  ```
+## level 3: changes on the PRs in the bottom of the stack
+  - ideally again all PRs would edit separate files to avoid conflicts
+  - if this condition has been fulfilled, you could just add another commit in the end of the PR you wish to fix. then from the topmost branch again you do `git rebase --update-refs <edited_branch>`. 
+## bonus: automation with github action
+  >> CREATE SCRIPT FOR UPDATING PR HERE
+
+
+## tools
+- graphite.dev
+- jujitsu
+
+## reference & acknowledgements
+- stacked.dev by graphite.dev . my original inspiration, but felt that its too shallow. thats why I created this website.
+- chatgpt convo: https://chatgpt.com/share/68be45f8-2910-800b-90c6-c17c5e0464a4
+- claude convo: https://claude.ai/share/f48b0df2-689c-4b69-aa17-eb050a4645f5
